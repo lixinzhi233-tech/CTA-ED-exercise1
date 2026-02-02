@@ -4,10 +4,15 @@ author: "Marion Lieutaud"
 date: "28/01/2026"
 output: html_document
 ---
+```{r}
 
-```{r setup, include=FALSE}
-JADEJADEJADEJADE
+options(repos = c(CRAN = "https://cloud.r-project.org"))
+
+if (!require(babynames)) install.packages("babynames")
+
+
 ```
+
 
 
 ```{r setup, include=FALSE}
@@ -42,6 +47,10 @@ getwd()
 
 Before proceeding, we'll load the remaining packages we will need for this exercise.
 
+```{r}
+install.packages('babynames')
+```
+
 ```{r, message=F}
 library(tidyverse) # loads dplyr, ggplot2, and others
 library(tidytext) # includes set of functions useful for manipulating text
@@ -64,7 +73,6 @@ If you're working on this document from your own computer ("locally"), without c
 ```{r, eval = F}
 edbfdata <- read_csv("https://raw.githubusercontent.com/cjbarrie/RDL-Ed/main/02-text-as-data/data/edbookfestall.csv")
 ```
-111
 
 ## Inspect and filter data 
 
@@ -75,6 +83,9 @@ colnames(edbfdata)
 ```
 
 And then: 
+```{r}
+summary(edbfdata)
+```
 
 ```{r}
 glimpse(edbfdata)
@@ -86,8 +97,7 @@ We use pipe `%>%` functions in the tidyverse package to quickly and efficiently 
 
 ```{r}
 # get simplified dataset with only event contents and year
-evdes <- edbfdata %>%
-  select(description, year)
+evdes <- edbfdata %>% select(description,year)
 
 head(evdes)
 ```
@@ -101,13 +111,21 @@ evtsperyr <- evdes %>%
   summarise(sum_events = sum(obs))
 ```
 
+```{r}
+#if add another column based on orginal form
+evdes %>%
+  group_by(year) %>%
+  mutate(count = n())
+
+```
+
 And then we can plot this using ggplot!
 
 ```{r, echo=T, warning=F}
 ggplot(evtsperyr) +
   geom_line(aes(year, sum_events)) +
   theme_tufte(base_family = "Helvetica") + 
-  scale_y_continuous(expand = c(0, 0), limits = c(0, NA))
+  scale_y_continuous(expand = c(0, 0), limits = c(0, NA))#expand: leave no space limits: scale of y axis
 ```
 
 Perhaps unsurprisingly, in the context of the pandemic, the number of recorded bookings for the 2020 Festival is drastically reduced. 
@@ -123,7 +141,15 @@ The below set of commands takes the event descriptions, extracts individual word
 tidy_des <- evdes %>% 
   mutate(desc = tolower(description)) %>%
   unnest_tokens(word, desc) %>%
-  filter(str_detect(word, "[a-z]"))
+  filter(str_detect(word, "[a-z]")) 
+head(tidy_des)
+
+```
+```{r}
+tidy_des1 <- evdes %>% 
+  mutate(desc = tolower(description)) %>%
+  unnest_tokens(word, desc)
+head(tidy_des1)
 
 ```
 
@@ -144,6 +170,7 @@ We can yet tidy this further, though. First we'll remove all stop words and then
 ```{r}
 tidy_des <- tidy_des %>%
     filter(!word %in% stop_words$word)
+head(tidy_des)
 ```
 
 We see that the number of rows in our dataset reduces by about half to ~223k rows. This is natural since a large proportion of any string will contain many so-called "stop words". We can see what these stop words are by typing:
@@ -158,7 +185,7 @@ Now let's have a look at the most common words in these data:
 
 ```{r}
 tidy_des %>%
-  count(word, sort = TRUE)
+  count(word, sort = TRUE)#a new dataframe
 ```
 
 We can see that one of the most common words is "rsquo," which is an HTML encoding for an apostrophe. Clearly we need to clean the data a bit more. This is a common issue in large-n text analysis and is a key step if you want to conduct reliably robust forms of text analysis. We'll have another go using the the filter command, specifying that we only keep the words that are not included in the string of words `r c("rsquo", "em", "ndash", "nbsp", "lsquo") `.
@@ -167,7 +194,7 @@ We can see that one of the most common words is "rsquo," which is an HTML encodi
 remove_reg <- c("&amp;","&lt;","&gt;","<p>", "</p>","&rsquo", "&lsquo;",  "&#39;", "<strong>", "</strong>", "rsquo", "em", "ndash", "nbsp", "lsquo", "strong")
                   
 tidy_des <- tidy_des %>%
-  filter(!word %in% remove_reg)
+  filter(!word %in% remove_reg)#words not in remove_reg
 ```
 
 ```{r}
@@ -182,7 +209,7 @@ Let's now collect these words into a data.frame object, which we'll call edbf_te
 ```{r}
 edbf_term_counts <- tidy_des %>% 
   group_by(year) %>%
-  count(word, sort = TRUE)
+  count(word, sort = TRUE)#build a new dataframe to count each words according to different years
 ```
 
 ```{r}
@@ -196,8 +223,9 @@ For each year, we see that "book" is the most common word... perhaps no surprise
 Okay, now we have our list of words, and the number of times they appear, we can tag those words we think might be related to issues of gender inequality and sexism. You may decide that this list is imprecise or inexhaustive. If so, then feel free to change the terms we are including after the `grepl()` function. 
 
 ```{r}
-edbf_term_counts$womword <- as.integer(grepl("women|feminist|feminism|gender|harassment|sexism|sexist", 
-                                            x = edbf_term_counts$word))
+edbf_term_counts$womword <- as.integer(grepl("women|feminist|feminism|gender|harassment|sexism|sexist|girl|girls|female", #true false
+                                            x = edbf_term_counts$word))#recognize word in counts if include things above
+#turn the resulte t and f as int(01)
 ```
 
 ```{r}
@@ -218,10 +246,10 @@ Are the keywords we used precise enough? If not, what would you change?
 #get counts by year and word
 edbf_counts <- edbf_term_counts %>%
   group_by(year) %>%
-  mutate(year_total = sum(n)) %>%
-  filter(womword==1) %>%
+  mutate(year_total = sum(n)) %>% #count all words' numb by year
+  filter(womword==1) %>% # then filter 
   summarise(sum_wom = sum(n),
-            year_total= min(year_total))
+            year_total= min(year_total)) #build a new one 
 ```
 
 ```{r}
@@ -463,9 +491,167 @@ ggplot(edbf_counts_both, aes(year, sum_wom / year_total, group=genre, color=genr
 2. Choose another set of terms by which to filter (e.g., race-related words) and plot their frequency over time.
 
 ```{r}
-# show me
+df_clean = edbfdata %>% select(year,description)
+#filter token remove stopwords
+total = df_clean %>% mutate(obs = 1 ) %>% group_by(year) %>% summarize(totalnumber = sum(obs)) #cnt of total num of each yr
+
+```
+```{r}
+
+tidy_des <- df_clean %>% 
+  mutate(desc = tolower(description)) %>%
+  unnest_tokens(word,desc) %>%
+  filter(str_detect(word, "[a-z]"))
+
+tidy_des = tidy_des %>% filter(!word %in% stop_words$word)
+
+
+```
+```{r}
+remove_reg <- c("&amp;","&lt;","&gt;","<p>", "</p>","&rsquo", "&lsquo;",  "&#39;", "<strong>", "</strong>", "rsquo", "em", "ndash", "nbsp", "lsquo", "strong")
+                  
+tidy_des <- tidy_des %>%
+  filter(!word %in% remove_reg)#words not in remove_reg
+
+tidy_count = tidy_des %>% group_by(year) %>% count(word,sort = TRUE)
+
+family_words <- c(
+  "family", "household", "home", "domestic",'couple',
+  "spouse", "husband", "wife", "partner", "marriage", 
+  "child", "children", "son", "daughter", "kid", "offspring", 
+  "parent", "mother", "father", "mom", "dad", 
+  "sibling", "brother", "sister", 
+  "grandparent", "grandmother", "grandfather", 
+  "relative", "relatives", "family member"
+)
+
+
+individual_words <- c(
+  "self", "ego", "identity", "autonomy", "independence", "individual", "person", "people",
+  "someone", "somebody", "anyone", "anybody", 'self','ego',
+  "choice", "decision", "preference", "initiative", "freedom", "liberty", "uniqueness",
+  "self-esteem", "self-worth", "introspection", "reflection", "experience", "perception",
+  "belief", "opinion", "motivation", "desire", "ambition", "aspiration"
+)
+
+# mark family
+tidy_count$family_flag <- as.integer(
+  grepl(paste(family_words, collapse = "|"), x = tidy_count$word, ignore.case = TRUE)
+)
+
+# mark self
+tidy_count$individual_flag <- as.integer(
+  grepl(paste(individual_words, collapse = "|"), x = tidy_count$word, ignore.case = TRUE)
+)
+```
+
+```{r}
+tidy_count_home <- tidy_count %>%
+  group_by(year) %>%
+  mutate(year_total = sum(n)) %>%
+  filter(family_flag==1) %>%
+  summarise(sum_home = sum(n),
+            year_total= min(year_total))
+#all key wors related to 'family' count
+```
+
+```{r}
+tidy_count_person = tidy_count %>% group_by(year) %>% mutate(year_total1 = sum(n)) %>% 
+  filter(individual_flag ==1)%>% 
+  summarise(sum_person = sum(n),year_total = min(year_total1))
+#all related to individualism
+```
+
+```{r}
+ggplot(tidy_count_home, aes(year, sum_home / year_total, group=1)) +
+  geom_line() +
+  xlab("Year") +
+  ylab("% family-related words") +
+  geom_smooth(method = lm, se = FALSE)+
+  scale_y_continuous(labels = scales::percent_format(),
+                     expand = c(0, 0), limits = c(0, NA)) +
+  theme_tufte(base_family = "Helvetica") 
+
+ggplot(tidy_count_home,aes(year,sum_home)) + geom_line() + xlab("year") + ylab("total amount of family-related words") +scale_y_continuous(expand = c(0, 0), limits = c(0, NA)) +
+  theme_tufte(base_family = "Helvetica") 
+
+```
+```{r}
+ggplot(tidy_count_person,aes(year,sum_person / year_total,group = 1)) + geom_line() + 
+  xlab('year') + ylab('% individual-related words') + geom_smooth(method = lm, se = FALSE) + scale_y_continuous(labels = scales::percent_format(),expand = c(0, 0), limits = c(0, NA)) + theme_tufte(base_family = "Helvetica") 
+
+ggplot(tidy_count_person,aes(year,sum_person)) + geom_line() + xlab('year') + ylab('total amount individual-related words') + 
+  scale_y_continuous(expand = c(0,0),limits = c(0,NA)) + theme_tufte(base_family = "Helvetica" )
+
+
 ```
 
 
+
+```{r}
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+library(ggthemes) # theme_tufte
+
+# merge and frequency 
+tidy_count_percent <- tidy_count_home %>%
+  select(year, sum_home, year_total) %>%
+  mutate(category = "Family", freq = sum_home / year_total) %>%
+  bind_rows(
+    tidy_count_person %>%
+      select(year, sum_person, year_total) %>%
+      mutate(category = "Individual", freq = sum_person / year_total)
+  )
+
+# merge 
+tidy_count_total <- tidy_count_home %>%
+  select(year, sum_home) %>%
+  mutate(category = "Family", total = sum_home) %>%
+  bind_rows(
+    tidy_count_person %>%
+      select(year, sum_person) %>%
+      mutate(category = "Individual", total = sum_person)
+  )
+
+
+
+```
+
+```{r}
+ggplot(tidy_count_percent, aes(x = year, y = freq, color = category, group = category)) +
+  geom_line(size = 1) +
+  geom_smooth(method = "lm",  se = FALSE,linetype = "dashed") +   # 回归曲线虚线
+  scale_color_manual(values = c("Family" = "#1b9e77", "Individual" = "#d95f02")) +  # 柔和配色
+  scale_y_continuous(labels = scales::percent_format(), expand = c(0, 0), limits = c(0, NA)) +
+  labs(
+    x = "Year",
+    y = "% of words",
+    color = "Category",
+    title = "Comparison Between Family and Individual Words"
+  ) +
+  theme_tufte(base_family = "Helvetica") +
+  theme(plot.title = element_text(hjust = 1))
+
+
+```
+```{r}
+ggplot(tidy_count_total, aes(x = year, y = total, color = category, group = category)) +
+  geom_line(size = 1) +
+  geom_smooth(method = "lm", se = FALSE,linetype = 'dashed') +
+  scale_color_manual(values = c("Family" = "skyblue", "Individual" = "#F5DEB3")) +
+  scale_y_continuous(expand = c(0, 0), limits = c(0, NA)) +
+  labs(
+    x = "Year",
+    y = "Total number of words",
+    color = "Category",
+    title = "Comparison Between Family and Individual Words"
+  ) +
+  theme_tufte(base_family = "Helvetica") +
+  theme(plot.title = element_text(hjust = 1))
+
+
+
+```
 3. Knit your document (click 'Knit' towards the top of your screen) when you've completed your exercise. It should create an html output file. 
 
